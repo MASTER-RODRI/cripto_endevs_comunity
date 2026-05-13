@@ -1,12 +1,12 @@
 [package]
 name = "cripto_endevs_comunity"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
-authors = ["ENRODMONTPAR <tu_email@ejemplo.com>"]
+authors = ["ENRODMONTPAR"]
 description = "Un micro-módulo de cifrado excéntrico y seguro basado en AES-GCM con sistema de Ratcheting."
 readme = "README.md"
 repository = "https://github.com/MASTER-RODRI/cripto_endevs_comunity"
-license = "MIT"
+license = "MIT OR Apache-2.0"
 keywords = ["crypto", "aes-gcm", "ratchet", "security"]
 categories = ["cryptography", "no-std"]
 
