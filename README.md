@@ -8,11 +8,11 @@ Un micro-módulo de cifrado excéntrico y seguro desarrollado en Rust. Utiliza *
 
 ## 🛠️ Instalación
 
-Añade `cryptonugget` a las dependencias de tu archivo `Cargo.toml`:
+Añade `cripto_endevs_comunity` a las dependencias de tu archivo `Cargo.toml`:
 
 ```toml
 [dependencies]
-cryptonugget = "0.1.0"
+cripto_endevs_comunity = "0.1.2"
 ```
 
 ## 🚀 Ejemplo de Uso
@@ -20,7 +20,7 @@ cryptonugget = "0.1.0"
 Aquí tienes un ejemplo rápido de cómo inicializar el módulo y realizar un ciclo de cifrado con mutación de clave:
 
 ```rust
-use cryptonugget::{CryptoNugget, Error};
+use cripto_endevs_comunity::{CryptoNugget, Error};
 
 fn main() {
     println!("--- DEMOSTRACIÓN DEL CRYPTO NUGGET (RUST) ---\n");
