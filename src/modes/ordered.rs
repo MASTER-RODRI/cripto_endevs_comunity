@@ -41,6 +41,7 @@ pub enum Role {
 /// Estructura principal que mantiene el estado mutante de las claves.
 ///
 /// Las claves internas se limpian con `zeroize` al mutar y al destruir la instancia.
+/// Alerta pro al libreria, se esta viendo una optimizacion para este punto
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct CryptoNugget {
     pub(crate) tx_key: [u8; 32],

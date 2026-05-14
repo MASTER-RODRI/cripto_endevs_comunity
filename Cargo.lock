@@ -79,7 +79,7 @@ dependencies = [
 
 [[package]]
 name = "cripto_endevs_comunity"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "aes-gcm",
  "base64",
