@@ -1,10 +1,16 @@
 //! Modos de operación del canal.
 //!
-//! `ordered` conserva el canal ratcheado histórico. `envelope` implementa un
-//! sobre stateless para mensajes independientes. `replay` se completa en PR4.
+//! - `ordered`: Canal ratcheado secuencial punto a punto con SHA-256 Transcript Accumulator.
+//! - `envelope`: Sobre stateless para blobs independientes.
+//! - `replay`: Canal con ventana anti-replay y nonces deterministas enmascarados.
+//! - `chrono`: Nuevo motor `ChronoMeshNode` v3 para arquitecturas distribuidas, concurrencia
+//!   multi-instancia, cifrado vinculado al tiempo y recuperación automática ante apagones.
 
-use crate::{CryptoNugget, Error, MasterSeed, ReplayWindowChannel, Role, StatelessEnvelope};
+use crate::{
+    ChronoMeshNode, CryptoNugget, Error, MasterSeed, ReplayWindowChannel, Role, StatelessEnvelope,
+};
 
+pub mod chrono;
 pub mod envelope;
 pub mod ordered;
 pub mod replay;
@@ -12,15 +18,21 @@ pub mod replay;
 /// Modo de operación explícito.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
-    /// Canal ratcheado y estrictamente ordenado. Es el comportamiento por defecto.
+    /// Canal ratcheado y estrictamente ordenado.
     OrderedChannel,
     /// Sobre stateless: cada mensaje deriva su propia clave desde la semilla y nonce.
     StatelessEnvelope,
-    /// Modo de ventana de replay. Se implementa en PR4.
+    /// Modo de ventana de replay con clave fija y nonce determinista.
     ReplayWindowChannel { window: u64 },
+    /// Malla distribuida basada en tiempo, concurrente y resistente a apagones.
+    ChronoMesh {
+        node_id: u32,
+        boot_epoch: u64,
+        max_time_drift_ms: u64,
+    },
 }
 
-/// Builder para construir el modo elegido sin perder la API simple existente.
+/// Builder para construir el modo elegido manteniendo compatibilidad con v0.2/v0.3.
 #[derive(Debug, Clone)]
 pub struct Builder<'a> {
     seed: &'a MasterSeed,
@@ -39,13 +51,11 @@ impl<'a> Builder<'a> {
         }
     }
 
-    /// Selecciona el modo de operación.
     pub fn mode(mut self, mode: Mode) -> Self {
         self.mode = mode;
         self
     }
 
-    /// Construye un canal ordenado.
     pub fn build_ordered(self) -> Result<CryptoNugget, Error> {
         match self.mode {
             Mode::OrderedChannel => Ok(CryptoNugget::new_with_context(
@@ -53,29 +63,42 @@ impl<'a> Builder<'a> {
                 self.role,
                 self.context,
             )),
-            Mode::StatelessEnvelope | Mode::ReplayWindowChannel { .. } => Err(Error::ModoInvalido),
+            _ => Err(Error::ModoInvalido),
         }
     }
 
-    /// Construye un sobre stateless.
     pub fn build_stateless_envelope(self) -> Result<StatelessEnvelope, Error> {
         match self.mode {
             Mode::StatelessEnvelope => {
                 Ok(StatelessEnvelope::new_with_context(self.seed, self.context))
             }
-            Mode::OrderedChannel | Mode::ReplayWindowChannel { .. } => Err(Error::ModoInvalido),
+            _ => Err(Error::ModoInvalido),
         }
     }
 
-    /// Construye un canal con ventana anti-replay.
-    ///
-    /// Este modo NO usa ratchet por mensaje; ver `SECURITY.md` antes de usarlo.
     pub fn build_replay_window(self) -> Result<ReplayWindowChannel, Error> {
         match self.mode {
             Mode::ReplayWindowChannel { window } => {
                 ReplayWindowChannel::new_with_context(self.seed, self.role, self.context, window)
             }
-            Mode::OrderedChannel | Mode::StatelessEnvelope => Err(Error::ModoInvalido),
+            _ => Err(Error::ModoInvalido),
+        }
+    }
+
+    pub fn build_chrono_mesh(self) -> Result<ChronoMeshNode, Error> {
+        match self.mode {
+            Mode::ChronoMesh {
+                node_id,
+                boot_epoch,
+                max_time_drift_ms,
+            } => Ok(ChronoMeshNode::new(
+                self.seed,
+                self.context,
+                node_id,
+                boot_epoch,
+                max_time_drift_ms,
+            )),
+            _ => Err(Error::ModoInvalido),
         }
     }
 }

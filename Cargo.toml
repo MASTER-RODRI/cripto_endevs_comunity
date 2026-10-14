@@ -11,9 +11,16 @@ license = "MIT OR Apache-2.0"
 keywords = ["crypto", "aes-gcm", "ratchet", "security"]
 categories = ["cryptography"]
 
+[lib]
+name = "cripto_endevs_comunity"
+# rlib: para proyectos Rust
+# cdylib: genera .dll (Windows), .so (Linux/Android), .dylib (macOS), .wasm (Web)
+# staticlib: genera .a / .lib para enlace estático en C/C++/iOS
+crate-type = ["rlib", "cdylib", "staticlib"]
+
 [dependencies]
-aes-gcm = "0.10.3"
-sha2 = "0.10.8"
-hkdf = "0.12.4"
+aes-gcm = "0.10"
 base64 = "0.22"
+hkdf = "0.12"
+sha2 = "0.10"
 zeroize = { version = "1.8", features = ["derive"] }
