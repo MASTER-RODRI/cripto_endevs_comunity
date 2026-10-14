@@ -81,6 +81,7 @@ impl PeerReplayState {
 pub struct ChronoMeshNode {
     mesh_root_key: [u8; 32],
     context_domain_hash: [u8; 32],
+    packet_prk: [u8; 32],
     node_id: u32,
     epoch: AtomicU64,
     tx_seq: AtomicU64,
@@ -98,6 +99,7 @@ impl Drop for ChronoMeshNode {
     fn drop(&mut self) {
         self.mesh_root_key.zeroize();
         self.context_domain_hash.zeroize();
+        self.packet_prk.zeroize();
     }
 }
 
@@ -132,9 +134,14 @@ impl ChronoMeshNode {
         hkdf.expand(b"mesh-context-hash", &mut context_domain_hash)
             .unwrap();
 
+        let (prk, _) = Hkdf::<Sha256>::extract(Some(&context_domain_hash), &mesh_root_key);
+        let mut packet_prk = [0u8; 32];
+        packet_prk.copy_from_slice(&prk);
+
         Self {
             mesh_root_key,
             context_domain_hash,
+            packet_prk,
             node_id,
             epoch: AtomicU64::new(boot_epoch),
             tx_seq: AtomicU64::new(0),
@@ -173,7 +180,8 @@ impl ChronoMeshNode {
         info[12..20].copy_from_slice(&seq.to_be_bytes());
         info[20..28].copy_from_slice(&timestamp_ms.to_be_bytes());
 
-        let hkdf = Hkdf::<Sha256>::new(Some(&self.context_domain_hash), &self.mesh_root_key);
+        let hkdf =
+            Hkdf::<Sha256>::from_prk(&self.packet_prk).expect("32 bytes is valid PRK for SHA-256");
         let mut okm = [0u8; 32 + NONCE_LEN];
         hkdf.expand(&info, &mut okm)
             .expect("HKDF expand nunca falla para 44 bytes");
@@ -495,8 +503,7 @@ impl ChronoMeshNode {
         for _ in 0..peer_count {
             let p_node = u32::from_be_bytes(raw[offset..offset + 4].try_into().unwrap());
             let p_epoch = u64::from_be_bytes(raw[offset + 4..offset + 12].try_into().unwrap());
-            let highest_raw =
-                u64::from_be_bytes(raw[offset + 12..offset + 20].try_into().unwrap());
+            let highest_raw = u64::from_be_bytes(raw[offset + 12..offset + 20].try_into().unwrap());
             let bitmap = u128::from_be_bytes(raw[offset + 20..offset + 36].try_into().unwrap());
             let highest_seen = if highest_raw == u64::MAX {
                 None

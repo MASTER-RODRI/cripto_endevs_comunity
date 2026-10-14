@@ -23,6 +23,7 @@ export enum CryptoNuggetErrorCode {
   AadDemasiadoLargo = -14,
   IntegridadContextoCorrupta = -15,
   FfiParametroInvalido = -16,
+  Io = -17,
 }
 
 export interface PacketV3Header {

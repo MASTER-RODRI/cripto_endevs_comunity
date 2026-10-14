@@ -136,6 +136,11 @@ impl ReplayWindowChannel {
         }
         self.ensure_sequence_is_new(packet.sequence)?;
 
+        let expected_nonce = Self::compute_nonce(&self.rx_nonce_mask, packet.sequence);
+        if packet.nonce != expected_nonce {
+            return Err(Error::Autenticacion);
+        }
+
         let internal_aad = build_internal_aad_v2(packet.flags, packet.sequence, aad)?;
         let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&self.rx_key));
         let nonce = Nonce::from_slice(&packet.nonce);

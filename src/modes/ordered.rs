@@ -163,8 +163,7 @@ impl CryptoNugget {
         } else {
             FLAG_AAD_PRESENT
         };
-        let internal_aad =
-            build_internal_aad_v2_with_epoch(flags, sequence, user_aad, self.epoch)?;
+        let internal_aad = build_internal_aad_v2_with_epoch(flags, sequence, user_aad, self.epoch)?;
 
         let ciphertext = cipher
             .encrypt(
@@ -308,7 +307,7 @@ impl CryptoNugget {
     ) {
         let mut hasher = Sha256::new();
         hasher.update(b"CryptoNugget:Transcript:v1");
-        hasher.update(&*acc);
+        hasher.update(*acc);
         hasher.update(epoch.to_be_bytes());
         hasher.update(seq.to_be_bytes());
         hasher.update(nonce);

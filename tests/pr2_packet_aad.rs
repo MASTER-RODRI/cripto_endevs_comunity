@@ -158,7 +158,10 @@ fn v1_inbound_rejects_external_aad() {
     let mut packet = Packet {
         version: 1,
         flags: 0,
+        node_id: 0,
+        epoch: 0,
         sequence: 0,
+        timestamp_ms: 0,
         nonce: [0u8; 12],
         ciphertext: vec![0u8; 16],
     };
@@ -187,11 +190,11 @@ fn unknown_wire_version_rejected_typed_error() {
     let (mut alice, mut bob) = pareja();
     let cifrado = alice.cifrar("x").unwrap();
     let mut bytes = STANDARD.decode(&cifrado).unwrap();
-    bytes[0] = 0x03; // future version
+    bytes[0] = 0xFF; // future version
     let mutado = STANDARD.encode(&bytes);
     assert!(matches!(
         bob.descifrar(&mutado),
-        Err(Error::VersionNoSoportada(3))
+        Err(Error::VersionNoSoportada(0xFF))
     ));
 }
 

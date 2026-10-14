@@ -35,7 +35,8 @@ namespace CryptoNugget.Interop
         TiempoExpiradoOInvalido = -13,
         AadDemasiadoLargo = -14,
         IntegridadContextoCorrupta = -15,
-        FfiParametroInvalido = -16
+        FfiParametroInvalido = -16,
+        Io = -17
     }
 
     public sealed class CryptoNuggetException : Exception

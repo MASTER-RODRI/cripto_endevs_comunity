@@ -98,6 +98,14 @@ fn builder_can_construct_replay_window_channel() {
 }
 
 #[test]
+fn replay_window_tampered_nonce_fails_authentication() {
+    let (mut alice, mut bob) = pareja(64);
+    let mut packet = alice.seal(b"secret", b"").unwrap();
+    packet.nonce[0] ^= 0x42;
+    assert!(matches!(bob.open(&packet, b""), Err(Error::Autenticacion)));
+}
+
+#[test]
 fn replay_window_debug_redacts_keys() {
     let seed = MasterSeed::generate();
     let channel = ReplayWindowChannel::new(&seed, Role::Initiator, 64).unwrap();

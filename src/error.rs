@@ -38,6 +38,8 @@ pub enum Error {
     IntegridadContextoCorrupta,
     /// Error de puntero nulo, buffer insuficiente o pánico capturado en la frontera FFI.
     FfiParametroInvalido,
+    /// Error de entrada/salida (I/O) en disco o almacenamiento persistente.
+    Io(String),
 }
 
 impl Error {
@@ -61,6 +63,7 @@ impl Error {
             Error::AadDemasiadoLargo => -14,
             Error::IntegridadContextoCorrupta => -15,
             Error::FfiParametroInvalido => -16,
+            Error::Io(_) => -17,
         }
     }
 }
@@ -79,7 +82,10 @@ impl std::fmt::Display for Error {
             ),
             Error::Utf8 => write!(f, "El texto descifrado no es UTF-8 válido"),
             Error::Cifrado => {
-                write!(f, "Error crítico en el cifrado o límite de secuencia alcanzado")
+                write!(
+                    f,
+                    "Error crítico en el cifrado o límite de secuencia alcanzado"
+                )
             }
             Error::SemillaInvalida => {
                 write!(f, "La semilla debe contener 32 bytes de alta entropía")
@@ -108,8 +114,15 @@ impl std::fmt::Display for Error {
                 f,
                 "Parámetro FFI inválido (puntero nulo o capacidad de buffer insuficiente)"
             ),
+            Error::Io(e) => write!(f, "Error de entrada/salida (I/O) en almacenamiento: {}", e),
         }
     }
 }
 
 impl std::error::Error for Error {}
+
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Self {
+        Error::Io(err.to_string())
+    }
+}

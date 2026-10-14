@@ -32,6 +32,7 @@ typedef struct CnMeshHandle CnMeshHandle;
 #define CN_ERR_AAD_TOO_LONG          -14
 #define CN_ERR_INTEGRITY_CORRUPTED   -15
 #define CN_ERR_FFI_INVALID_PARAM     -16
+#define CN_ERR_IO                    -17
 
 int32_t cn_generate_master_seed(uint8_t* out_seed_32);
 

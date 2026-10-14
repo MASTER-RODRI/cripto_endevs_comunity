@@ -22,6 +22,10 @@
 //!      verifica toda la cadena desde el génesis, rescata el 100 % de los paquetes completos y devuelve el offset
 //!      exacto para truncar los bytes huérfanos del corte de luz (`WalRecoveryReport`).
 
+use std::fs::{self, File, OpenOptions};
+use std::io::Write;
+use std::path::Path;
+
 use aes_gcm::{
     Aes256Gcm, Key, Nonce,
     aead::{Aead, AeadCore, KeyInit, OsRng, Payload},
@@ -136,11 +140,7 @@ fn encode_state_v2(nugget: &CryptoNugget) -> Result<Vec<u8>, Error> {
     Ok(state)
 }
 
-fn decode_state(
-    version: u8,
-    bytes: &[u8],
-    expected_context: &[u8],
-) -> Result<CryptoNugget, Error> {
+fn decode_state(version: u8, bytes: &[u8], expected_context: &[u8]) -> Result<CryptoNugget, Error> {
     let fixed_len = if version == SNAPSHOT_VERSION_V2 {
         32 + 32 + 8 + 8 + 8 + 32 + 32 + 4
     } else {
@@ -248,18 +248,24 @@ impl DualSlotContainer {
     /// apagón a mitad de escritura, hace fallback automático e inmediato a la ranura anterior.
     pub fn recover_latest_valid(&self, wrap_key: &[u8; 32]) -> Result<(u64, Vec<u8>), Error> {
         let primary_first = if self.generation_a >= self.generation_b {
-            [(&self.slot_a, self.generation_a), (&self.slot_b, self.generation_b)]
+            [
+                (&self.slot_a, self.generation_a),
+                (&self.slot_b, self.generation_b),
+            ]
         } else {
-            [(&self.slot_b, self.generation_b), (&self.slot_a, self.generation_a)]
+            [
+                (&self.slot_b, self.generation_b),
+                (&self.slot_a, self.generation_a),
+            ]
         };
 
         for (slot_bytes, expected_gen) in primary_first {
-            if !slot_bytes.is_empty() && expected_gen > 0 {
-                if let Ok((gen_val, data)) = Self::open_slot(slot_bytes, wrap_key) {
-                    if gen_val == expected_gen {
-                        return Ok((gen_val, data));
-                    }
-                }
+            if !slot_bytes.is_empty()
+                && expected_gen > 0
+                && let Ok((gen_val, data)) = Self::open_slot(slot_bytes, wrap_key)
+                && gen_val == expected_gen
+            {
+                return Ok((gen_val, data));
             }
         }
         Err(Error::PaqueteCorrupto)
@@ -373,6 +379,50 @@ impl DualSlotContainer {
 
         Ok((generation, plaintext))
     }
+
+    /// Guarda el contenedor en disco de forma 100 % atómica y a prueba de apagones.
+    ///
+    /// Protocolo:
+    /// 1. Escribe en un archivo temporal en el mismo directorio (`<path>.tmp.<pid>`).
+    /// 2. Ejecuta `sync_all()` (`fdatasync` / `FlushFileBuffers`) para vaciar el caché del SO y SSD.
+    /// 3. Ejecuta `fs::rename` atómico que reemplaza el archivo de destino sin ventanas de corrupción.
+    /// 4. Sincroniza el directorio padre para asegurar la durabilidad de la entrada de inodo/MFT.
+    pub fn save_atomic(&self, path: impl AsRef<Path>) -> Result<(), Error> {
+        let path = path.as_ref();
+        let bytes = self.to_bytes()?;
+
+        let tmp_path = path.with_extension(format!("tmp.{}", std::process::id()));
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&tmp_path)
+            .map_err(|e| Error::Io(e.to_string()))?;
+
+        file.write_all(&bytes)
+            .map_err(|e| Error::Io(e.to_string()))?;
+        file.sync_all().map_err(|e| Error::Io(e.to_string()))?;
+        drop(file);
+
+        fs::rename(&tmp_path, path).map_err(|e| {
+            let _ = fs::remove_file(&tmp_path);
+            Error::Io(e.to_string())
+        })?;
+
+        if let Some(parent) = path.parent()
+            && let Ok(dir) = File::open(parent)
+        {
+            let _ = dir.sync_all();
+        }
+
+        Ok(())
+    }
+
+    /// Carga el contenedor desde un archivo en disco.
+    pub fn load_from_file(path: impl AsRef<Path>) -> Result<Self, Error> {
+        let bytes = fs::read(path).map_err(|e| Error::Io(e.to_string()))?;
+        Self::from_bytes(&bytes)
+    }
 }
 
 // ============================================================================
@@ -451,6 +501,56 @@ impl ChronoWalJournal {
         self.head_sha256 = frame_sha;
         self.frames_count = self.frames_count.saturating_add(1);
         Ok(frame)
+    }
+
+    /// Añade un frame al final de un archivo WAL en disco de forma duradera y resiliente a apagones.
+    /// Ejecuta `sync_data()` / `sync_all()` para garantizar que los datos crucen el caché del SO y del SSD.
+    pub fn append_to_file(&mut self, path: impl AsRef<Path>, packet: &Packet) -> Result<(), Error> {
+        let frame = self.encode_append_frame(packet)?;
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path.as_ref())
+            .map_err(|e| Error::Io(e.to_string()))?;
+
+        file.write_all(&frame)
+            .map_err(|e| Error::Io(e.to_string()))?;
+        file.sync_data().map_err(|e| Error::Io(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Recupera y auto-repara un archivo WAL en disco tras un apagón o reinicio.
+    /// Si el archivo termina con un frame incompleto (corte de luz a mitad de append),
+    /// trunca el archivo en el byte exacto (`valid_bytes_len`) y lo sincroniza a disco.
+    pub fn recover_from_file(path: impl AsRef<Path>) -> Result<(Self, WalRecoveryReport), Error> {
+        let path = path.as_ref();
+        if !path.exists() {
+            return Ok((
+                Self::new(),
+                WalRecoveryReport {
+                    packets: Vec::new(),
+                    head_chain_sha256: [0u8; 32],
+                    valid_bytes_len: 0,
+                    had_truncated_tail: false,
+                },
+            ));
+        }
+
+        let bytes = fs::read(path).map_err(|e| Error::Io(e.to_string()))?;
+        let report = Self::recover_from_bytes(&bytes)?;
+
+        if report.had_truncated_tail {
+            let file = OpenOptions::new()
+                .write(true)
+                .open(path)
+                .map_err(|e| Error::Io(e.to_string()))?;
+            file.set_len(report.valid_bytes_len as u64)
+                .map_err(|e| Error::Io(e.to_string()))?;
+            file.sync_all().map_err(|e| Error::Io(e.to_string()))?;
+        }
+
+        let journal = Self::from_head(report.head_chain_sha256, report.packets.len() as u64);
+        Ok((journal, report))
     }
 
     /// Escanea un flujo de bytes de bitácora WAL (ej. leído del disco tras un apagón):

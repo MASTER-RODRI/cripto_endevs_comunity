@@ -20,6 +20,8 @@ public final class CryptoNuggetBridge {
     public static final int CN_ERR_REPLAY_DETECTED = -10;
     public static final int CN_ERR_TIME_EXPIRED = -13;
     public static final int CN_ERR_INTEGRITY_CORRUPTED = -15;
+    public static final int CN_ERR_FFI_INVALID_PARAM = -16;
+    public static final int CN_ERR_IO = -17;
 
     /**
      * Metadatos extraídos de la cabecera Wire v3 sin necesidad de descifrar el paquete.
