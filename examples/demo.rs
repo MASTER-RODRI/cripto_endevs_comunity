@@ -20,7 +20,27 @@ fn main() {
     let cp1 = node_back.export_checkpoint(&wrap_key).unwrap();
     let gen1 = dual_slot.commit_state(&cp1, &wrap_key).unwrap();
     println!("Snapshot Generación {} sellado en Slot A.", gen1);
+// 1. Imprimir los paquetes completos en Base64 (Wire v3) y el Ciphertext puro en Hex
+    println!("Cifrado p1 (Wire v3 Base64): {}", p1.to_base64());
+    println!("Cifrado p2 (Wire v3 Base64): {}", p2.to_base64());
 
+    println!("p1 Nonce + Ciphertext (Hex): {:02X?} | {:02X?}", p1.nonce, p1.ciphertext);
+    println!("p2 Nonce + Ciphertext (Hex): {:02X?} | {:02X?}\n", p2.nonce, p2.ciphertext);
+
+    // 2. Prueba de Excentricidad / Efecto Avalancha (mismo texto plano, mismo milisegundo)
+    let muestra_a = node_back.seal_realtime(b"Mismo contexto IA", b"aad", now_ms).unwrap();
+    let muestra_b = node_back.seal_realtime(b"Mismo contexto IA", b"aad", now_ms).unwrap();
+    let bits_distintos: u32 = muestra_a.ciphertext.iter()
+        .zip(muestra_b.ciphertext.iter())
+        .map(|(a, b)| (a ^ b).count_ones())
+        .sum();
+    let total_bits = (muestra_a.ciphertext.len() * 8) as f64;
+    println!("Muestra A (Base64): {}", muestra_a.to_base64());
+    println!("Muestra B (Base64): {}", muestra_b.to_base64());
+    println!(
+        "Excentricidad (Distancia de Hamming en Ciphertext): {}/{} bits ({:.2}% - ideal ~50.0%)\n",
+        bits_distintos, total_bits as u32, (bits_distintos as f64 / total_bits) * 100.0
+    );
     // Emitimos un 3er paquete y guardamos la Generación 2 en Slot B
     let p3 = node_back.seal_realtime(b"Estado memoria IA #3", b"aad:3", now_ms + 10).unwrap();
     let cp2 = node_back.export_checkpoint(&wrap_key).unwrap();
